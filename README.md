@@ -10,7 +10,7 @@ The goal is to provide data-driven operational insights for NHS trust management
 ## Tech Stack & Database Schema
 * **Database Engine:** SQLite / PostgreSQL
 * **SQL Interface:** DBeaver Community Edition
-* **Key Concepts:** Data Filtering (`WHERE`), Aggregations (`GROUP BY`, `SUM()`, `AVERAGE()`, `COUNT()`), Date Calculations (`JULIANDAY`)Sorting (`ORDER BY`), Rounding(`ROUND()`)
+* **Key Concepts:** Data Filtering (`WHERE`), Aggregations (`GROUP BY`, `SUM()`, `AVERAGE()`, `COUNT()`), Date Calculations (`JULIANDAY`), Sorting (`ORDER BY`), Rounding(`ROUND()`)
 
 ---
 
@@ -40,7 +40,7 @@ ORDER BY age DESC;
 ### 2. High-Cost Specialist Admissions (> £1,000)
 **Business Objective:** Financial oversight of high-expenditure inpatient stays in Cardiology and Oncology wards.
 
-**SQL Code (02_basic_filters.sql):** 
+**SQL Code (`02_basic_filters.sql`):** 
 ```sql
 SELECT 
     admission_id,
@@ -66,7 +66,7 @@ ORDER BY treatment_cost DESC;
 
 Business Objective: Evaluate total expenditure and average cost per stay across specialties to inform annual trust budget allocation.
 
-***SQL Code (03_department_costs.sql):***
+***SQL Code (`03_department_costs.sql`):***
 ```sql
 SELECT 
     department,
@@ -89,7 +89,7 @@ ORDER BY total_department_cost DESC;
 
 Business Objective: Measure average bed occupancy days per department to identify discharge delays and bed availability bottlenecks.
 
-***SQL Code (04_department_wait_times.sql):***
+***SQL Code (`04_department_wait_times.sql`):***
 ```sql
 SELECT 
     department,
@@ -109,11 +109,13 @@ ORDER BY avg_stay_days DESC;
 |Cardiology|3|3.0|4.0|
 |Emergency|1|1.0|1.0|
 
-
-
 ## Key Findings & Recommendations
-High Oncology Resource Intensity: Oncology accounts for the largest share of overall expenditures (£6,300.00) and the longest length of stay (8.0 days average). Recommendation: Review inpatient oncology treatment plans to determine if pre-chemotherapy assessments can be transitioned to outpatient clinics. 
+***High Oncology Resource Intensity:*** Oncology accounts for the largest share of overall expenditures (£6,300.00) and the longest length of stay (8.0 days average).
 
-Readmission Risk Signaling: Patient 101 (Sarah Khan) had two separate Cardiology admissions within 3 weeks (18 days apart). This indicates a potential post-discharge follow-up failure. Recommendation: Implement mandatory 7-day post-discharge phone check-ins for cardiac patients.  
+Recommendation: Conduct a secondary clinical audit into the primary drivers of inpatient Oncology stays (such as pre-chemotherapy workups vs. active treatment monitoring) to evaluate if stable pre-treatment assessments can be safely transitioned to outpatient day clinics to free up inpatient bed capacity. 
 
-Emergency Efficiency: Emergency admissions demonstrate rapid throughput (1.0 days average stay), meeting acute operational discharge targets. 
+***Readmission Risk Signaling:*** Patient 101 (Sarah Khan) had two separate Cardiology admissions within 3 weeks (18 days apart). This indicates a potential gap in post-discharge support. 
+
+Recommendation: Establish a mandatory 7-day post-discharge phone check-in protocol for all Cardiology patients to audit medication adherence, address early symptom flare-ups, and reduce avoidable 30-day readmissions.
+
+***Emergency Efficiency:*** Emergency admissions demonstrate rapid throughput (1.0 days average stay), meeting acute operational discharge targets. 
