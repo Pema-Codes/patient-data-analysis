@@ -1,7 +1,7 @@
 # NHS Clinical Data Analysis & Audit
 
 ## Executive Summary
-This project analyzes inpatient admission records to identify vulnerable elderly patient cohorts, evaluate length of stay (LOS) operational bottlenecks, and perform financial auditing on high-cost specialist ward stays (Cardiology, Oncology, Emergency).
+This project analyzes inpatient admission records to identify vulnerable elderly patient cohorts, evaluate length of stay (LOS) operational bottlenecks, and perform relational data joins across clinical tables and conduct financial auditing on high-cost specialist ward stays (Cardiology, Oncology, Emergency).
 
 The goal is to provide data-driven operational insights for NHS trust management to optimize bed capacity, streamline community discharge planning, and control departmental expenditure. 
 
@@ -10,7 +10,7 @@ The goal is to provide data-driven operational insights for NHS trust management
 ## Tech Stack & Database Schema
 * **Database Engine:** SQLite / PostgreSQL
 * **SQL Interface:** DBeaver Community Edition
-* **Key Concepts:** Data Filtering (`WHERE`), Aggregations (`GROUP BY`, `SUM()`, `AVERAGE()`, `COUNT()`), Date Calculations (`JULIANDAY`), Sorting (`ORDER BY`), Rounding(`ROUND()`)
+* **Key Concepts:** Relational Joins (`INNER JOIN`, `LEFT JOIN`), Data Filtering (`WHERE`), Aggregations (`GROUP BY`, `SUM()`, `AVERAGE()`, `COUNT()`), Date Calculations (`JULIANDAY`), Sorting (`ORDER BY`), Rounding(`ROUND()`)
 
 ---
 
@@ -64,7 +64,7 @@ ORDER BY treatment_cost DESC;
 
 ### 3. Departmental Financial Audit (Volume & Cost)
 
-Business Objective: Evaluate total expenditure and average cost per stay across specialties to inform annual trust budget allocation.
+**Business Objective:** Evaluate total expenditure and average cost per stay across specialties to inform annual trust budget allocation.
 
 ***SQL Code (`03_department_costs.sql`):***
 ```sql
@@ -87,7 +87,7 @@ ORDER BY total_department_cost DESC;
 
 ### 4. Length of Stay & Operational Bottlenecks
 
-Business Objective: Measure average bed occupancy days per department to identify discharge delays and bed availability bottlenecks.
+**Business Objective:** Measure average bed occupancy days per department to identify discharge delays and bed availability bottlenecks.
 
 ***SQL Code (`04_department_wait_times.sql`):***
 ```sql
@@ -109,13 +109,70 @@ ORDER BY avg_stay_days DESC;
 |Cardiology|3|3.0|4.0|
 |Emergency|1|1.0|1.0|
 
+### 5. Patient Demographic & Admission Joins
+***Business Objective:*** Link demographic patient profiles with active clinical admission histories and audit total patient registry records.
+
+***SQL Code (05_patient_joins.sql):***
+```sql
+-- Query 1: Active Admissions (INNER JOIN)
+SELECT 
+    p.patient_id,
+    p.patient_name,
+    p.age,
+    p.gender,
+    a.admission_id,
+    a.department,
+    a.admission_date,
+    a.discharge_date,
+    a.treatment_cost
+FROM patients p
+INNER JOIN admissions a 
+    ON p.patient_id = a.patient_id
+ORDER BY a.admission_date ASC;
+
+-- Query 2: Full Registry Audit (LEFT JOIN)
+SELECT 
+    p.patient_id,
+    p.patient_name,
+    p.age,
+    a.admission_id,
+    a.department,
+    a.treatment_cost
+FROM patients p
+LEFT JOIN admissions a 
+    ON p.patient_id = a.patient_id
+ORDER BY p.patient_id ASC;
+```
+***Output (INNER JOIN)- Active Admissions***
+
+|patient_id|patient_name|age|gender|admission_id|department|admission_date|discharge_date|treatment_cost|
+|----------|------------|---|------|------------|----------|--------------|--------------|--------------|
+|101|Sarah Khan|45|F|1|Cardiology|2026-01-10|2026-01-14|1200|
+|102|John Smith|62|M|2|Oncology|2026-01-12|2026-01-20|3500|
+|103|Elena Gomez|29|F|3|Cardiology|2026-01-15|2026-01-16|450|
+|104|David Chen|71|M|4|Emergency|2026-01-18|2026-01-19|300|
+|105|Amira Patel|53|F|5|Oncology|2026-01-20|2026-01-28|2800|
+|101|Sarah Khan|45|F|6|Cardiology|2026-02-01|2026-02-05|1100|
+
+***Output (INNER JOIN)- Full Registry Audit***
+
+|patient_id|patient_name|age|admission_id|department|treatment_cost|
+|----------|------------|---|------------|----------|--------------|
+|101|Sarah Khan|45|1|Cardiology|1200|
+|101|Sarah Khan|45|6|Cardiology|1100|
+|102|John Smith|62|2|Oncology|3500|
+|103|Elena Gomez|29|3|Cardiology|450|
+|104|David Chen|71|4|Emergency|300|
+|105|Amira Patel|53|5|Oncology|2800|
+
 ## Key Findings & Recommendations
-***High Oncology Resource Intensity:*** Oncology accounts for the largest share of overall expenditures (£6,300.00) and the longest length of stay (8.0 days average).
 
-Recommendation: Conduct a secondary clinical audit into the primary drivers of inpatient Oncology stays (such as pre-chemotherapy workups vs. active treatment monitoring) to evaluate if stable pre-treatment assessments can be safely transitioned to outpatient day clinics to free up inpatient bed capacity. 
+***High Oncology Resource Intensity:*** Oncology accounts for the largest share of overall expenditures (£6,300.00) and the longest length of stay ***(8.0 days average)***. 
 
-***Readmission Risk Signaling:*** Patient 101 (Sarah Khan) had two separate Cardiology admissions within 3 weeks (18 days apart). This indicates a potential gap in post-discharge support. 
+***Recommendation:*** Conduct a secondary clinical audit into the primary drivers of inpatient Oncology stays (such as pre-chemotherapy workups vs. active treatment monitoring) to evaluate if stable pre-treatment assessments can be safely transitioned to outpatient day clinics to free up inpatient bed capacity. 
 
-Recommendation: Establish a mandatory 7-day post-discharge phone check-in protocol for all Cardiology patients to audit medication adherence, address early symptom flare-ups, and reduce avoidable 30-day readmissions.
+***Readmission Risk Signaling:*** Patient `101` (Sarah Khan) had two separate Cardiology admissions within 3 weeks (18 days apart). This indicates a potential gap in post-discharge support. 
 
-***Emergency Efficiency:*** Emergency admissions demonstrate rapid throughput (1.0 days average stay), meeting acute operational discharge targets. 
+***Recommendation:*** Establish a mandatory ***7-day post-discharge phone check-in protocol*** for all Cardiology patients to audit medication adherence, address early symptom flare-ups, and reduce avoidable 30-day readmissions.
+
+***Emergency Efficiency:*** Emergency admissions demonstrate rapid throughput (***1.0 days average stay***), meeting acute operational discharge targets. 
