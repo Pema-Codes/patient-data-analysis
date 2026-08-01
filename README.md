@@ -1,16 +1,16 @@
 # NHS Clinical Data Analysis & Audit
 
 ## Executive Summary
-This project analyzes inpatient admission records to identify vulnerable elderly patient cohorts, evaluate length of stay (LOS) operational bottlenecks, and perform relational data joins across clinical tables, track 30-day readmissions using advanced Windows functions and conduct financial auditing on high-cost specialist ward stays (Cardiology, Oncology, Emergency).
+This project analyzes inpatient admission records to identify vulnerable elderly patient cohorts, evaluate length of stay (LOS) operational bottlenecks, and perform relational data joins across clinical tables, track 30-day readmissions, rank high-cost treatment stays using advanced window functions,and conduct financial auditing on high-cost specialist ward stays (Cardiology, Oncology, Emergency).
 
-The goal is to provide data-driven operational insights for NHS trust management to optimize bed capacity, streamline community discharge planning, and control departmental expenditure
+The goal is to provide data-driven operational insights for NHS trust management to optimize bed capacity, streamline community discharge planning, and departmental budget allocation. 
 
 ---
 
 ## Tech Stack & Database Schema
 * **Database Engine:** SQLite / PostgreSQL
 * **SQL Interface:** DBeaver Community Edition
-* **Key Concepts:** Window Functions (`LAG()`, `OVER`, `PARTITIONBY`), Relational Joins (`INNER JOIN`, `LEFT JOIN`), Common Table Expressions (`WITH`), Data Filtering (`WHERE`), Aggregations (`GROUP BY`, `SUM()`, `AVERAGE()`, `COUNT()`), Date Calculations (`JULIANDAY`), Conditional Logic(`CASE WHEN`), Sorting (`ORDER BY`), Rounding(`ROUND()`)
+* **Key Concepts:** Window Functions (`RANK()`,`LAG()`, `OVER`, `PARTITION BY`), Relational Joins (`INNER JOIN`, `LEFT JOIN`), Common Table Expressions (`WITH`), Data Filtering (`WHERE`), Aggregations (`GROUP BY`, `SUM()`, `AVERAGE()`, `COUNT()`), Date Calculations (`JULIANDAY`), Conditional Logic(`CASE WHEN`), Sorting (`ORDER BY`), Rounding(`ROUND()`)
 
 ---
 
@@ -212,6 +212,50 @@ ORDER BY patient_id ASC, admission_date ASC;
 |104|4|Emergency|4|||0|
 |105|5|Oncology|5|||0|
 
+### 7. Departmental Cost Ranking (Top 3 Cases per Specialty) 
+
+**Business Objective**: Rank treatment costs within each department independently using RANK() OVER (PARTITION BY ...) to spotlight extreme financial outliers for clinical auditing.
+
+**SQL Code (07_high_cost_ranking.sql)**:
+```sql
+WITH RankedAdmissions AS (
+	SELECT 
+		a.admission_id, 
+		p.patient_id, 
+		p.patient_name,
+		a.department,
+		a.treatment_cost,
+		-- Rank admissions by cost within each department 
+		RANK() OVER (
+			PARTITION BY a.department
+			ORDER BY a.treatment_cost DESC
+			) AS Cost_rank 
+FROM admissions a INNER JOIN patients p 
+ON a.patient_id = p.patient_id 
+)
+
+SELECT
+	department,
+	cost_rank,
+	admission_id,
+	patient_id,
+	patient_name,
+	treatment_cost
+FROM RankedAdmissions 
+WHERE cost_rank <= 3
+ORDER BY department ASC, Cost_rank ASC;
+```
+**Output**:
+
+|department|Cost_rank|admission_id|patient_id|patient_name|treatment_cost|
+|----------|---------|------------|----------|------------|--------------|
+|Cardiology|1|1|101|Sarah Khan|1200|
+|Cardiology|2|6|101|Sarah Khan|1100|
+|Cardiology|3|3|103|Elena Gomez|450|
+|Emergency|1|4|104|David Chen|300|
+|Oncology|1|2|102|John Smith|3500|
+|Oncology|2|5|105|Amira Patel|2800|
+
 ## Key Findings & Recommendations
 
 ***High Oncology Resource Intensity:*** Oncology accounts for the largest share of overall expenditures (£6,300.00) and the longest length of stay ***(8.0 days average)***. 
@@ -221,5 +265,9 @@ ORDER BY patient_id ASC, admission_date ASC;
 ***Readmission Risk Signaling:*** Patient `101` (Sarah Khan) had two separate Cardiology admissions within 3 weeks (18 days apart). This indicates a potential gap in post-discharge support. 
 
 ***Recommendation:*** Establish a mandatory ***7-day post-discharge phone check-in protocol*** for all Cardiology patients to audit medication adherence, address early symptom flare-ups, and reduce avoidable 30-day readmissions.
+
+***Departmental Outlier Identification:*** The RANK() audit revealed John Smith (£3,500.00) and Chloe Adams (£2,800.00) as the top two financial expenditures in Oncology. 
+
+***Recommendation:*** Implement senior financial case reviews for top-tier ranked cases to audit pharmaceutical expenditure against standardized treatment pathways.
 
 ***Emergency Efficiency:*** Emergency admissions demonstrate rapid throughput (***1.0 days average stay***), meeting acute operational discharge targets. 
