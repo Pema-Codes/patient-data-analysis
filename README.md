@@ -1,16 +1,16 @@
 # NHS Clinical Data Analysis & Audit
 
 ## Executive Summary
-This project analyzes inpatient admission records to identify vulnerable elderly patient cohorts, evaluate length of stay (LOS) operational bottlenecks, and perform relational data joins across clinical tables and conduct financial auditing on high-cost specialist ward stays (Cardiology, Oncology, Emergency).
+This project analyzes inpatient admission records to identify vulnerable elderly patient cohorts, evaluate length of stay (LOS) operational bottlenecks, and perform relational data joins across clinical tables, track 30-day readmissions using advanced Windows functions and conduct financial auditing on high-cost specialist ward stays (Cardiology, Oncology, Emergency).
 
-The goal is to provide data-driven operational insights for NHS trust management to optimize bed capacity, streamline community discharge planning, and control departmental expenditure. 
+The goal is to provide data-driven operational insights for NHS trust management to optimize bed capacity, streamline community discharge planning, and control departmental expenditure
 
 ---
 
 ## Tech Stack & Database Schema
 * **Database Engine:** SQLite / PostgreSQL
 * **SQL Interface:** DBeaver Community Edition
-* **Key Concepts:** Relational Joins (`INNER JOIN`, `LEFT JOIN`), Data Filtering (`WHERE`), Aggregations (`GROUP BY`, `SUM()`, `AVERAGE()`, `COUNT()`), Date Calculations (`JULIANDAY`), Sorting (`ORDER BY`), Rounding(`ROUND()`)
+* **Key Concepts:** Window Functions (`LAG()`, `OVER`, `PARTITIONBY`), Relational Joins (`INNER JOIN`, `LEFT JOIN`), Common Table Expressions (`WITH`), Data Filtering (`WHERE`), Aggregations (`GROUP BY`, `SUM()`, `AVERAGE()`, `COUNT()`), Date Calculations (`JULIANDAY`), Conditional Logic(`CASE WHEN`), Sorting (`ORDER BY`), Rounding(`ROUND()`)
 
 ---
 
@@ -164,6 +164,53 @@ ORDER BY p.patient_id ASC;
 |103|Elena Gomez|29|3|Cardiology|450|
 |104|David Chen|71|4|Emergency|300|
 |105|Amira Patel|53|5|Oncology|2800|
+
+### 6. Unplanned 30-day Readmission Analysis
+
+** Business Objective:**Automatically track patient return gaps using the LAG() window function to identify high-risk readmission events that signal care quality issues. 
+
+***SQL Code (06_readmission_lags.sql):***
+```sql
+WITH PatientStays AS (
+	SELECT
+		patient_id,
+		admission_id,
+		department,
+		admission_date,
+		discharge_date,
+		-- Get the discharge date from the patient's previous visit
+		LAG(discharge_date,1) OVER (
+			PARTITION BY patient_id
+			ORDER BY admission_date ASC
+			) AS prev_discharge_date
+	FROM admissions
+)
+
+SELECT 
+	patient_id,
+	admission_id,
+	department,
+	admission_id,
+	prev_discharge_date,
+	-- Calculate days between previous discharge and current admission
+	ROUND(JULIANDAY(admission_date) - julianday(prev_discharge_date), 0) AS days_since_last_discharge,
+	-- Flag readmissoins that occur within 30 days
+	CASE
+		WHEN (julianday(admission_date)- julianday(prev_discharge_date)) <=30 THEN 1
+		ELSE 0
+	END AS is_30day_readmission
+FROM PatientStays
+ORDER BY patient_id ASC, admission_date ASC;
+```
+**Output:**
+|patient_id|admission_id|department|admission_id|prev_discharge_date|days_since_last_discharge|is_30day_readmission|
+|----------|------------|----------|------------|-------------------|-------------------------|--------------------|
+|101|1|Cardiology|1|||0|
+|101|6|Cardiology|6|2026-01-14|18.0|1|
+|102|2|Oncology|2|||0|
+|103|3|Cardiology|3|||0|
+|104|4|Emergency|4|||0|
+|105|5|Oncology|5|||0|
 
 ## Key Findings & Recommendations
 
