@@ -167,7 +167,7 @@ ORDER BY p.patient_id ASC;
 
 ### 6. Unplanned 30-day Readmission Analysis
 
-** Business Objective:**Automatically track patient return gaps using the LAG() window function to identify high-risk readmission events that signal care quality issues. 
+**Business Objective**: Automatically track patient return gaps using the LAG() window function to identify high-risk readmission events that signal care quality issues. 
 
 ***SQL Code (06_readmission_lags.sql):***
 ```sql
