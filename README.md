@@ -1,7 +1,7 @@
 # NHS Clinical Data Analysis & Audit
 
 ## Executive Summary
-This project analyzes inpatient admission records to identify vulnerable elderly patient cohorts, evaluate length of stay (LOS) operational bottlenecks, and perform relational data joins across clinical tables, track 30-day readmissions, rank high-cost treatment stays using advanced window functions,and conduct financial auditing on high-cost specialist ward stays (Cardiology, Oncology, Emergency).
+This project analyzes inpatient admission records to identify vulnerable elderly patient cohorts, evaluate length of stay (LOS) operational bottlenecks, and perform relational data joins across clinical tables, track 30-day readmissions, rank high-cost treatment stays and segment high-risk patient cohorts using modular Common Table Expressions (CTEs) using advanced window functions,and conduct financial auditing on high-cost specialist ward stays (Cardiology, Oncology, Emergency).
 
 The goal is to provide data-driven operational insights for NHS trust management to optimize bed capacity, streamline community discharge planning, and departmental budget allocation. 
 
@@ -10,7 +10,7 @@ The goal is to provide data-driven operational insights for NHS trust management
 ## Tech Stack & Database Schema
 * **Database Engine:** SQLite / PostgreSQL
 * **SQL Interface:** DBeaver Community Edition
-* **Key Concepts:** Window Functions (`RANK()`,`LAG()`, `OVER`, `PARTITION BY`), Relational Joins (`INNER JOIN`, `LEFT JOIN`), Common Table Expressions (`WITH`), Data Filtering (`WHERE`), Aggregations (`GROUP BY`, `SUM()`, `AVERAGE()`, `COUNT()`), Date Calculations (`JULIANDAY`), Conditional Logic(`CASE WHEN`), Sorting (`ORDER BY`), Rounding(`ROUND()`)
+* **Key Concepts:** Window Functions (`RANK()`,`LAG()`, `OVER`, `PARTITION BY`), Relational Joins (`INNER JOIN`, `LEFT JOIN`), Common Table Expressions (`WITH ...AS`), Data Filtering (`WHERE`), Aggregations (`GROUP BY`, `SUM()`, `AVERAGE()`, `COUNT()`), Date Calculations (`JULIANDAY`), Conditional Logic(`CASE WHEN`), Sorting (`ORDER BY`), Rounding(`ROUND()`)
 
 ---
 
@@ -256,18 +256,65 @@ ORDER BY department ASC, Cost_rank ASC;
 |Oncology|1|2|102|John Smith|3500|
 |Oncology|2|5|105|Amira Patel|2800|
 
+### 8. High-Risk Cohort Segmentation via Modular CTEs
+
+**Business Objective:** Segment high-risk, high-cost vulnerable patients (Age >= 60 AND Total Spent > £1,000) using multi-stage Common Table Expressions to target multi-disciplinary care interventions.
+
+***SQL Code (08_cohort_ctes.sql):***
+
+```sql
+-- Step 1: Calculate total spending per patient
+WITH PatientSpending AS (
+	SELECT 
+		patient_id,
+		COUNT(admission_id) AS total_admissions,
+		ROUND(SUM(treatment_cost),2) AS total_spent
+	FROM admissions
+	GROUP BY patient_id
+),
+
+-- Step 2: Filter for elderly/vulnerable demographic (Age >= 60)
+VulnerablePatients AS (
+	SELECT
+		 patient_id,
+		 patient_name,
+		 age,
+		 gender
+	FROM patients 
+	WHERE age >= 60
+)
+
+-- Step 3: Combine both CTEs to output high-risk cohort (Spent > £1000 AND Age >= 60)
+SELECT 
+	vp.patient_id,
+	vp.patient_name,
+	vp.age, 
+	vp.gender,
+	ps.total_admissions, 
+	ps.total_spent
+FROM VulnerablePatients vp
+INNER JOIN PatientSpending ps
+	ON vp.patient_id = ps.patient_id
+WHERE ps.total_spent > 1000.00
+ORDER BY ps.total_spent DESC;
+```
+**Output:** 
+|patient_id|patient_name|age|gender|total_admissions|total_spent|
+|----------|------------|---|------|----------------|-----------|
+|102|John Smith|62|M|1|3500.0|
+
 ## Key Findings & Recommendations
 
-***High Oncology Resource Intensity:*** Oncology accounts for the largest share of overall expenditures (£6,300.00) and the longest length of stay ***(8.0 days average)***. 
+**1.High Oncology Resource Intensity:** Oncology accounts for the largest share of overall expenditures (£6,300.00) and the longest length of stay ***(8.0 days average)***. 
+**Recommendation:** Conduct a secondary clinical audit into the primary drivers of inpatient Oncology stays (such as pre-chemotherapy workups vs. active treatment monitoring) to evaluate if stable pre-treatment assessments can be safely transitioned to outpatient day clinics to free up inpatient bed capacity. 
 
-***Recommendation:*** Conduct a secondary clinical audit into the primary drivers of inpatient Oncology stays (such as pre-chemotherapy workups vs. active treatment monitoring) to evaluate if stable pre-treatment assessments can be safely transitioned to outpatient day clinics to free up inpatient bed capacity. 
+**2.Readmission Risk Signaling:** Patient `101` (Sarah Khan) had two separate Cardiology admissions within 3 weeks (18 days apart). This indicates a potential gap in post-discharge support. 
+**Recommendation:** Establish a mandatory ***7-day post-discharge phone check-in protocol*** for all Cardiology patients to audit medication adherence, address early symptom flare-ups, and reduce avoidable 30-day readmissions.
 
-***Readmission Risk Signaling:*** Patient `101` (Sarah Khan) had two separate Cardiology admissions within 3 weeks (18 days apart). This indicates a potential gap in post-discharge support. 
+**3.High-Risk Vulnerable Cohort Management:** The CTE cohort segmentation identified senior high-cost individuals such as John Smith (Age 62, £3,500.00 total expenditure). 
+***Recommendation:*** Assign dedicated Multi-Disciplinary Team (MDT) caseworkers and social care coordinators to senior patients meeting the high-cost threshold to structure comprehensive post-discharge plans.
 
-***Recommendation:*** Establish a mandatory ***7-day post-discharge phone check-in protocol*** for all Cardiology patients to audit medication adherence, address early symptom flare-ups, and reduce avoidable 30-day readmissions.
-
-***Departmental Outlier Identification:*** The RANK() audit revealed John Smith (£3,500.00) and Chloe Adams (£2,800.00) as the top two financial expenditures in Oncology. 
-
+**4.Departmental Outlier Identification:** The RANK() audit revealed John Smith (£3,500.00) and Chloe Adams (£2,800.00) as the top two financial expenditures in Oncology. 
 ***Recommendation:*** Implement senior financial case reviews for top-tier ranked cases to audit pharmaceutical expenditure against standardized treatment pathways.
 
-***Emergency Efficiency:*** Emergency admissions demonstrate rapid throughput (***1.0 days average stay***), meeting acute operational discharge targets. 
+**5.Emergency Efficiency:** Emergency admissions demonstrate rapid throughput (***1.0 days average stay***), meeting acute operational discharge targets. 
