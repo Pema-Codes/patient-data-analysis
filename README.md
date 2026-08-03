@@ -1,16 +1,16 @@
 # NHS Clinical Data Analysis & Audit
 
 ## Executive Summary
-This project analyzes inpatient admission records to identify vulnerable elderly patient cohorts, evaluate length of stay (LOS) operational bottlenecks, and perform relational data joins across clinical tables, track 30-day readmissions, rank high-cost treatment stays and segment high-risk patient cohorts using modular Common Table Expressions (CTEs) using advanced window functions,and conduct financial auditing on high-cost specialist ward stays (Cardiology, Oncology, Emergency).
+This project analyzes inpatient admission records to identify vulnerable elderly patient cohorts, evaluate length of stay (LOS) operational bottlenecks, and perform relational data joins across clinical tables, track 30-day readmissions, rank high-cost treatment stays and segment high-risk patient cohorts using modular Common Table Expressions (CTEs) using advanced window functions, perform data cleaning/standardization for active admissions and inconsistent patient registries and conduct financial auditing on high-cost specialist ward stays (Cardiology, Oncology, Emergency).
 
-The goal is to provide data-driven operational insights for NHS trust management to optimize bed capacity, streamline community discharge planning, and departmental budget allocation. 
+The goal is to provide data-driven operational insights for NHS trust management to optimize bed capacity, streamline community discharge planning, data quality governance, and departmental budget allocation. 
 
 ---
 
 ## Tech Stack & Database Schema
 * **Database Engine:** SQLite / PostgreSQL
 * **SQL Interface:** DBeaver Community Edition
-* **Key Concepts:** Window Functions (`RANK()`,`LAG()`, `OVER`, `PARTITION BY`), Relational Joins (`INNER JOIN`, `LEFT JOIN`), Common Table Expressions (`WITH ...AS`), Data Filtering (`WHERE`), Aggregations (`GROUP BY`, `SUM()`, `AVERAGE()`, `COUNT()`), Date Calculations (`JULIANDAY`), Conditional Logic(`CASE WHEN`), Sorting (`ORDER BY`), Rounding(`ROUND()`)
+* **Key Concepts:** Data Cleaning (`COALESCE`, `UPPER`, `IS NULL`)Window Functions (`RANK()`,`LAG()`, `OVER`, `PARTITION BY`), Relational Joins (`INNER JOIN`, `LEFT JOIN`), Common Table Expressions (`WITH ...AS`), Data Filtering (`WHERE`), Aggregations (`GROUP BY`, `SUM()`, `AVERAGE()`, `COUNT()`), Date Calculations (`JULIANDAY`), Conditional Logic(`CASE WHEN`), Sorting (`ORDER BY`), Rounding(`ROUND()`)
 
 ---
 
@@ -303,18 +303,78 @@ ORDER BY ps.total_spent DESC;
 |----------|------------|---|------|----------------|-----------|
 |102|John Smith|62|M|1|3500.0|
 
+### 9. Data Cleaning & Standardization (Active Stays & Gender Formats)
+
+**Business Objective:** Handle un-discharged active stays (NULL values) and standardize mixed registration text formats ('M', 'Male', 'F', 'Female') to preserve data integrity for trust-wide reporting.
+
+***SQL Code (09_data_cleaning.sql):***
+
+```sql
+-- Query 1: Standardize Gender values using CASE WHEN
+
+SELECT 
+	patient_id, 
+	patient_name,
+	age,
+	gender AS raw_gender,
+	CASE 
+		WHEN UPPER(gender) IN ('M','Male') THEN 'Male'
+		WHEN UPPER(gender) IN ('F', 'Female') THEN 'Female'
+		ELSE 'Others/Unspecified'
+	END AS standardized_gender
+FROM patients;
+
+-- Query 2: Handle NULL discharge dates for active patients
+-- Replaces NULL discharge dates with 'Currently Admitted' or the current date for Length of Stay calculations
+SELECT
+	admission_id,
+	patient_id,
+	department,
+	admission_date,
+	discharge_date,
+	-- Handle missing discharge date label
+	CASE
+		WHEN discharge_date IS NULL THEN 'Active Patient'
+		ELSE discharge_date
+	END AS discharge_status,
+	-- Calculate length of stay (uses current date if discharge_date is NULL)
+	ROUND(julianday(COALESCE(discharge_date, CURRENT_DATE))-julianday(admission_date), 1) AS current_los_days 
+FROM admissions;
+```	
+**Output (Gender values standardized):**
+|patient_id|patient_name|age|raw_gender|standardized_gender|
+|----------|------------|---|----------|-------------------|
+|101|Sarah Khan|45|F|Female|
+|102|John Smith|62|M|Male|
+|103|Elena Gomez|29|F|Female|
+|104|David Chen|71|M|Male|
+|105|Amira Patel|53|F|Female|
+
+**Output (Active Stays Cleaned):**
+|admission_id|patient_id|department|admission_date|discharge_date|discharge_status|current_los_days|
+|------------|----------|----------|--------------|--------------|----------------|----------------|
+|1|101|Cardiology|2026-01-10|2026-01-14|2026-01-14|4.0|
+|2|102|Oncology|2026-01-12|2026-01-20|2026-01-20|8.0|
+|3|103|Cardiology|2026-01-15|2026-01-16|2026-01-16|1.0|
+|4|104|Emergency|2026-01-18|2026-01-19|2026-01-19|1.0|
+|5|105|Oncology|2026-01-20|2026-01-28|2026-01-28|8.0|
+|6|101|Cardiology|2026-02-01|2026-02-05|2026-02-05|4.0|
+
+
 ## Key Findings & Recommendations
 
-**1.High Oncology Resource Intensity:** Oncology accounts for the largest share of overall expenditures (£6,300.00) and the longest length of stay ***(8.0 days average)***. 
+**1.Data Standardization & Governance:** Inconsistent entry formats (`'M'` vs `'Male'`) and un-discharged `NULL` records introduce reporting errors in aggregation queries. **Recommendation:** Implement automated data validation rules at reception check-in and utilize `COALESCE`(discharge_date, CURRENT_DATE) in operational dashboards to track active bed occupancy in real time.
+
+**2.High Oncology Resource Intensity:** Oncology accounts for the largest share of overall expenditures (£6,300.00) and the longest length of stay ***(8.0 days average)***. 
 **Recommendation:** Conduct a secondary clinical audit into the primary drivers of inpatient Oncology stays (such as pre-chemotherapy workups vs. active treatment monitoring) to evaluate if stable pre-treatment assessments can be safely transitioned to outpatient day clinics to free up inpatient bed capacity. 
 
-**2.Readmission Risk Signaling:** Patient `101` (Sarah Khan) had two separate Cardiology admissions within 3 weeks (18 days apart). This indicates a potential gap in post-discharge support. 
+**3.Readmission Risk Signaling:** Patient `101` (Sarah Khan) had two separate Cardiology admissions within 3 weeks (18 days apart). This indicates a potential gap in post-discharge support. 
 **Recommendation:** Establish a mandatory ***7-day post-discharge phone check-in protocol*** for all Cardiology patients to audit medication adherence, address early symptom flare-ups, and reduce avoidable 30-day readmissions.
 
-**3.High-Risk Vulnerable Cohort Management:** The CTE cohort segmentation identified senior high-cost individuals such as John Smith (Age 62, £3,500.00 total expenditure). 
+**4.High-Risk Vulnerable Cohort Management:** The CTE cohort segmentation identified senior high-cost individuals such as John Smith (Age 62, £3,500.00 total expenditure). 
 ***Recommendation:*** Assign dedicated Multi-Disciplinary Team (MDT) caseworkers and social care coordinators to senior patients meeting the high-cost threshold to structure comprehensive post-discharge plans.
 
-**4.Departmental Outlier Identification:** The RANK() audit revealed John Smith (£3,500.00) and Chloe Adams (£2,800.00) as the top two financial expenditures in Oncology. 
+**5.Departmental Outlier Identification:** The RANK() audit revealed John Smith (£3,500.00) and Chloe Adams (£2,800.00) as the top two financial expenditures in Oncology. 
 ***Recommendation:*** Implement senior financial case reviews for top-tier ranked cases to audit pharmaceutical expenditure against standardized treatment pathways.
 
-**5.Emergency Efficiency:** Emergency admissions demonstrate rapid throughput (***1.0 days average stay***), meeting acute operational discharge targets. 
+**6.Emergency Efficiency:** Emergency admissions demonstrate rapid throughput (***1.0 days average stay***), meeting acute operational discharge targets. 
