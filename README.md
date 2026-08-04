@@ -1,7 +1,7 @@
 # NHS Clinical Data Analysis & Audit
 
 ## Executive Summary
-This project analyzes inpatient admission records to identify vulnerable elderly patient cohorts, evaluate length of stay (LOS) operational bottlenecks, and perform relational data joins across clinical tables, track 30-day readmissions, rank high-cost treatment stays and segment high-risk patient cohorts using modular Common Table Expressions (CTEs) using advanced window functions, perform data cleaning/standardization for active admissions and inconsistent patient registries, conduct financial auditing on high-cost specialist ward stays (Cardiology, Oncology, Emergency) and implement international clinical terminology mapping (ICD-10 / SNOMED CT).
+This project analyzes inpatient admission records to identify vulnerable elderly patient cohorts, evaluate length of stay (LOS) operational bottlenecks, and perform relational data joins across clinical tables, track 30-day readmissions, rank high-cost treatment stays and segment high-risk patient cohorts using modular Common Table Expressions (CTEs) using advanced window functions, perform data cleaning/standardization for active admissions and inconsistent patient registries, implement international clinical terminology mapping (ICD-10 / SNOMED CT), conduct financial auditing on high-cost specialist ward stays (Cardiology, Oncology, Emergency) and evaluate cumulative monthly patient throughput and budget expenditure using window function running totals. 
 
 The goal is to provide data-driven operational insights for NHS trust management to optimize bed capacity, streamline community discharge planning, data quality governance, clinical interoperability and departmental budget allocation. 
 
@@ -10,7 +10,7 @@ The goal is to provide data-driven operational insights for NHS trust management
 ## Tech Stack & Database Schema
 * **Database Engine:** SQLite / PostgreSQL
 * **SQL Interface:** DBeaver Community Edition
-* **Key Concepts:** Clinical Terminology Mapping (ICD-10, SNOMED CT), Data Cleaning (`COALESCE`, `UPPER`, `IS NULL`)Window Functions (`RANK()`,`LAG()`, `OVER`, `PARTITION BY`), Relational Joins (`INNER JOIN`, `LEFT JOIN`), Common Table Expressions (`WITH ...AS`), Data Filtering (`WHERE`), Aggregations (`GROUP BY`, `SUM()`, `AVERAGE()`, `COUNT()`), Date Calculations (`JULIANDAY`), Conditional Logic(`CASE WHEN`), Sorting (`ORDER BY`), Rounding(`ROUND()`)
+* **Key Concepts:** Cumulative Running Totals (`SUM() OVER`), Date Formatting (`strftime`), Clinical Terminology Mapping (ICD-10, SNOMED CT), Data Cleaning (`COALESCE`, `UPPER`, `IS NULL`)Window Functions (`RANK()`,`LAG()`, `OVER`, `PARTITION BY`), Relational Joins (`INNER JOIN`, `LEFT JOIN`), Common Table Expressions (`WITH ...AS`), Data Filtering (`WHERE`), Aggregations (`GROUP BY`, `SUM()`, `AVERAGE()`, `COUNT()`), Date Calculations (`JULIANDAY`), Conditional Logic(`CASE WHEN`), Sorting (`ORDER BY`), Rounding(`ROUND()`)
 
 ---
 
@@ -410,22 +410,57 @@ ORDER BY a.admission_id ASC;
 |5|105|Amira Patel|Oncology|C34.9|254637007|Malignant Neoplasm of Unspecified Bronchus or Lung|2026-01-20|2800|
 |6|101|Sarah Khan|Cardiology|I21.9|57054005|Acute Myocardial Infarction (Heart Attack)|2026-02-01|1100|
 
+### 11. Cumulative Monthly Trends & Budget Analysis
+
+**Business Objective:** Track cumulative monthly admission growth and running expenditure totals using SUM() OVER (ORDER BY ...) to provide senior management with long-term volume and budget tracking.
+
+**SQL Code (`11_monthly_trends.sql`):**
+```sql
+--STEP 1: Groupinng by month(MonthlyAdmissions)
+WITH MonthlyAdmissions AS (
+	SELECT 
+		strftime('%Y-%m', admission_date) AS admission_month,
+		COUNT(admission_id) AS monthly_total_adms,
+		ROUND(SUM(treatment_cost),2) AS monthly_expenditure
+	FROM admissions
+	GROUP BY strftime('%Y-%m', admission_date)
+) 
+-- STEP2: Calculate running totals
+SELECT 
+	admission_month, 
+	monthly_total_adms,
+	-- Running total of admissions over time
+	SUM(monthly_total_adms) OVER (ORDER BY admission_month ASC) AS running_total_admissions,
+	monthly_expenditure,
+	--Running total of expenditure over time
+	SUM(monthly_expenditure) OVER (ORDER BY admission_month ASC) AS running_total_expenditure
+FROM MonthlyAdmissions
+ORDER BY admission_month ASC;
+```
+**Output:**
+|admission_month|monthly_total_adms|running_total_admissions|monthly_expenditure|running_total_expenditure|
+|---------------|------------------|------------------------|-------------------|-------------------------|
+|2026-01|5|5|8250.0|8250.0|
+|2026-02|1|6|1100.0|9350.0|
+
 ## Key Findings & Recommendations
 
-**Clinical Coding & Interoperability Standardization:** Mapping department encounters to standardized ICD-10 and SNOMED CT codes resolves medical ambiguity and ensures compliance with NHS digital health records standards. **Recommendation:** Mandatory integration of SNOMED CT clinical coding lookup tables across electronic health records (EHR) to streamline clinical reporting and epidemiological audit trails.
+**1. Cumulative Financial & Operational Forecasting:** Running totals reveal that trust expenditure reached £9,350.0 across 6 total admissions by February 2026, with the vast majority (£8250.00) consumed in January. **Recommendation:** Establish dynamic monthly budget burn-rate alerts to detect front-loaded operational expenditure early in the financial year.
 
-**Data Standardization & Governance:** Inconsistent entry formats (`'M'` vs `'Male'`) and un-discharged `NULL` records introduce reporting errors in aggregation queries. **Recommendation:** Implement automated data validation rules at reception check-in and utilize `COALESCE`(discharge_date, CURRENT_DATE) in operational dashboards to track active bed occupancy in real time.
+**2. Clinical Coding & Interoperability Standardization:** Mapping department encounters to standardized ICD-10 and SNOMED CT codes resolves medical ambiguity and ensures compliance with NHS digital health records standards. **Recommendation:** Mandatory integration of SNOMED CT clinical coding lookup tables across electronic health records (EHR) to streamline clinical reporting and epidemiological audit trails.
 
-**High Oncology Resource Intensity:** Oncology accounts for the largest share of overall expenditures (£6,300.00) and the longest length of stay ***(8.0 days average)***. 
+**3. Data Standardization & Governance:** Inconsistent entry formats (`'M'` vs `'Male'`) and un-discharged `NULL` records introduce reporting errors in aggregation queries. **Recommendation:** Implement automated data validation rules at reception check-in and utilize `COALESCE`(discharge_date, CURRENT_DATE) in operational dashboards to track active bed occupancy in real time.
+
+**4. High Oncology Resource Intensity:** Oncology accounts for the largest share of overall expenditures (£6,300.00) and the longest length of stay ***(8.0 days average)***. 
 **Recommendation:** Conduct a secondary clinical audit into the primary drivers of inpatient Oncology stays (such as pre-chemotherapy workups vs. active treatment monitoring) to evaluate if stable pre-treatment assessments can be safely transitioned to outpatient day clinics to free up inpatient bed capacity. 
 
-**Readmission Risk Signaling:** Patient `101` (Sarah Khan) had two separate Cardiology admissions within 3 weeks (18 days apart). This indicates a potential gap in post-discharge support. 
+**5. Readmission Risk Signaling:** Patient `101` (Sarah Khan) had two separate Cardiology admissions within 3 weeks (18 days apart). This indicates a potential gap in post-discharge support. 
 **Recommendation:** Establish a mandatory ***7-day post-discharge phone check-in protocol*** for all Cardiology patients to audit medication adherence, address early symptom flare-ups, and reduce avoidable 30-day readmissions.
 
-**High-Risk Vulnerable Cohort Management:** The CTE cohort segmentation identified senior high-cost individuals such as John Smith (Age 62, £3,500.00 total expenditure). 
+**6. High-Risk Vulnerable Cohort Management:** The CTE cohort segmentation identified senior high-cost individuals such as John Smith (Age 62, £3,500.00 total expenditure). 
 ***Recommendation:*** Assign dedicated Multi-Disciplinary Team (MDT) caseworkers and social care coordinators to senior patients meeting the high-cost threshold to structure comprehensive post-discharge plans.
 
-**Departmental Outlier Identification:** The RANK() audit revealed John Smith (£3,500.00) and Chloe Adams (£2,800.00) as the top two financial expenditures in Oncology. 
+**7. Departmental Outlier Identification:** The RANK() audit revealed John Smith (£3,500.00) and Chloe Adams (£2,800.00) as the top two financial expenditures in Oncology. 
 ***Recommendation:*** Implement senior financial case reviews for top-tier ranked cases to audit pharmaceutical expenditure against standardized treatment pathways.
 
-**Emergency Efficiency:** Emergency admissions demonstrate rapid throughput (***1.0 days average stay***), meeting acute operational discharge targets. 
+**8. Emergency Efficiency:** Emergency admissions demonstrate rapid throughput (***1.0 days average stay***), meeting acute operational discharge targets. 
