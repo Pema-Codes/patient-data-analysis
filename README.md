@@ -464,3 +464,8 @@ ORDER BY admission_month ASC;
 ***Recommendation:*** Implement senior financial case reviews for top-tier ranked cases to audit pharmaceutical expenditure against standardized treatment pathways.
 
 **8. Emergency Efficiency:** Emergency admissions demonstrate rapid throughput (***1.0 days average stay***), meeting acute operational discharge targets. 
+
+### Clinical Impact Summary
+> * **High-Risk Admissions:** Identified top financial and length-of-stay drivers in Oncology (avg. 8-day stays) to target for outpatient pathway transitions.
+> * **Readmission Tracking:** Flagged early 30-day readmissions in Cardiology using `LAG()` window functions to trigger post-discharge follow-up care.
+> * **Vulnerable Cohorts:** Automated identification of elderly high-cost patients ($\ge 60$ yrs, spending $> £1,000$) for Multi-Disciplinary Team (MDT) intervention.
