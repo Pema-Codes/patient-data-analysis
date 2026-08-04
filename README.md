@@ -1,16 +1,16 @@
 # NHS Clinical Data Analysis & Audit
 
 ## Executive Summary
-This project analyzes inpatient admission records to identify vulnerable elderly patient cohorts, evaluate length of stay (LOS) operational bottlenecks, and perform relational data joins across clinical tables, track 30-day readmissions, rank high-cost treatment stays and segment high-risk patient cohorts using modular Common Table Expressions (CTEs) using advanced window functions, perform data cleaning/standardization for active admissions and inconsistent patient registries and conduct financial auditing on high-cost specialist ward stays (Cardiology, Oncology, Emergency).
+This project analyzes inpatient admission records to identify vulnerable elderly patient cohorts, evaluate length of stay (LOS) operational bottlenecks, and perform relational data joins across clinical tables, track 30-day readmissions, rank high-cost treatment stays and segment high-risk patient cohorts using modular Common Table Expressions (CTEs) using advanced window functions, perform data cleaning/standardization for active admissions and inconsistent patient registries, conduct financial auditing on high-cost specialist ward stays (Cardiology, Oncology, Emergency) and implement international clinical terminology mapping (ICD-10 / SNOMED CT).
 
-The goal is to provide data-driven operational insights for NHS trust management to optimize bed capacity, streamline community discharge planning, data quality governance, and departmental budget allocation. 
+The goal is to provide data-driven operational insights for NHS trust management to optimize bed capacity, streamline community discharge planning, data quality governance, clinical interoperability and departmental budget allocation. 
 
 ---
 
 ## Tech Stack & Database Schema
 * **Database Engine:** SQLite / PostgreSQL
 * **SQL Interface:** DBeaver Community Edition
-* **Key Concepts:** Data Cleaning (`COALESCE`, `UPPER`, `IS NULL`)Window Functions (`RANK()`,`LAG()`, `OVER`, `PARTITION BY`), Relational Joins (`INNER JOIN`, `LEFT JOIN`), Common Table Expressions (`WITH ...AS`), Data Filtering (`WHERE`), Aggregations (`GROUP BY`, `SUM()`, `AVERAGE()`, `COUNT()`), Date Calculations (`JULIANDAY`), Conditional Logic(`CASE WHEN`), Sorting (`ORDER BY`), Rounding(`ROUND()`)
+* **Key Concepts:** Clinical Terminology Mapping (ICD-10, SNOMED CT), Data Cleaning (`COALESCE`, `UPPER`, `IS NULL`)Window Functions (`RANK()`,`LAG()`, `OVER`, `PARTITION BY`), Relational Joins (`INNER JOIN`, `LEFT JOIN`), Common Table Expressions (`WITH ...AS`), Data Filtering (`WHERE`), Aggregations (`GROUP BY`, `SUM()`, `AVERAGE()`, `COUNT()`), Date Calculations (`JULIANDAY`), Conditional Logic(`CASE WHEN`), Sorting (`ORDER BY`), Rounding(`ROUND()`)
 
 ---
 
@@ -30,7 +30,7 @@ FROM patients
 WHERE age >= 60
 ORDER BY age DESC;
 ```
-***Output:***
+**Output:**
 
 |patient_id|patient_name|age|gender|
 |----------|------------|---|------|
@@ -53,7 +53,7 @@ WHERE treatment_cost > 1000.00
   AND department IN ('Cardiology', 'Oncology')
 ORDER BY treatment_cost DESC;
 ```
-***Output:***
+**Output:**
 
 |admission_id|patient_id|department|admission_date|treatment_cost|
 |------------|----------|----------|--------------|--------------|
@@ -66,7 +66,7 @@ ORDER BY treatment_cost DESC;
 
 **Business Objective:** Evaluate total expenditure and average cost per stay across specialties to inform annual trust budget allocation.
 
-***SQL Code (`03_department_costs.sql`):***
+**SQL Code (`03_department_costs.sql`):**
 ```sql
 SELECT 
     department,
@@ -77,7 +77,7 @@ FROM admissions
 GROUP BY department
 ORDER BY total_department_cost DESC;
 ```
-***Output:***
+**Output:**
 
 |department|total_admissions|total_department_cost|avg_cost_per_admission|
 |----------|----------------|---------------------|----------------------|
@@ -89,7 +89,7 @@ ORDER BY total_department_cost DESC;
 
 **Business Objective:** Measure average bed occupancy days per department to identify discharge delays and bed availability bottlenecks.
 
-***SQL Code (`04_department_wait_times.sql`):***
+**SQL Code (`04_department_wait_times.sql`):**
 ```sql
 SELECT 
     department,
@@ -101,7 +101,7 @@ WHERE discharge_date IS NOT NULL
 GROUP BY department
 ORDER BY avg_stay_days DESC;
 ```
-***Output:***
+**Output:**
 
 |department|total_patients|avg_stay_days|max_stay_days|
 |----------|--------------|-------------|-------------|
@@ -110,9 +110,9 @@ ORDER BY avg_stay_days DESC;
 |Emergency|1|1.0|1.0|
 
 ### 5. Patient Demographic & Admission Joins
-***Business Objective:*** Link demographic patient profiles with active clinical admission histories and audit total patient registry records.
+**Business Objective:** Link demographic patient profiles with active clinical admission histories and audit total patient registry records.
 
-***SQL Code (05_patient_joins.sql):***
+**SQL Code (`05_patient_joins.sql`):**
 ```sql
 -- Query 1: Active Admissions (INNER JOIN)
 SELECT 
@@ -143,7 +143,7 @@ LEFT JOIN admissions a
     ON p.patient_id = a.patient_id
 ORDER BY p.patient_id ASC;
 ```
-***Output (INNER JOIN)- Active Admissions***
+**Output (INNER JOIN)- Active Admissions**
 
 |patient_id|patient_name|age|gender|admission_id|department|admission_date|discharge_date|treatment_cost|
 |----------|------------|---|------|------------|----------|--------------|--------------|--------------|
@@ -154,7 +154,7 @@ ORDER BY p.patient_id ASC;
 |105|Amira Patel|53|F|5|Oncology|2026-01-20|2026-01-28|2800|
 |101|Sarah Khan|45|F|6|Cardiology|2026-02-01|2026-02-05|1100|
 
-***Output (INNER JOIN)- Full Registry Audit***
+**Output (INNER JOIN)- Full Registry Audit**
 
 |patient_id|patient_name|age|admission_id|department|treatment_cost|
 |----------|------------|---|------------|----------|--------------|
@@ -169,7 +169,7 @@ ORDER BY p.patient_id ASC;
 
 **Business Objective**: Automatically track patient return gaps using the LAG() window function to identify high-risk readmission events that signal care quality issues. 
 
-***SQL Code (06_readmission_lags.sql):***
+**SQL Code (`06_readmission_lags.sql`):**
 ```sql
 WITH PatientStays AS (
 	SELECT
@@ -216,7 +216,7 @@ ORDER BY patient_id ASC, admission_date ASC;
 
 **Business Objective**: Rank treatment costs within each department independently using RANK() OVER (PARTITION BY ...) to spotlight extreme financial outliers for clinical auditing.
 
-**SQL Code (07_high_cost_ranking.sql)**:
+**SQL Code (`07_high_cost_ranking.sql`)**:
 ```sql
 WITH RankedAdmissions AS (
 	SELECT 
@@ -260,7 +260,7 @@ ORDER BY department ASC, Cost_rank ASC;
 
 **Business Objective:** Segment high-risk, high-cost vulnerable patients (Age >= 60 AND Total Spent > £1,000) using multi-stage Common Table Expressions to target multi-disciplinary care interventions.
 
-***SQL Code (08_cohort_ctes.sql):***
+**SQL Code (`08_cohort_ctes.sql`):**
 
 ```sql
 -- Step 1: Calculate total spending per patient
@@ -307,7 +307,7 @@ ORDER BY ps.total_spent DESC;
 
 **Business Objective:** Handle un-discharged active stays (NULL values) and standardize mixed registration text formats ('M', 'Male', 'F', 'Female') to preserve data integrity for trust-wide reporting.
 
-***SQL Code (09_data_cleaning.sql):***
+**SQL Code (`09_data_cleaning.sql`):**
 
 ```sql
 -- Query 1: Standardize Gender values using CASE WHEN
@@ -360,21 +360,72 @@ FROM admissions;
 |5|105|Oncology|2026-01-20|2026-01-28|2026-01-28|8.0|
 |6|101|Cardiology|2026-02-01|2026-02-05|2026-02-05|4.0|
 
+### 10. Clinical Terminology Mapping (ICD-10 & SNOMED CT)
+
+**Business Objective:** Build a relational clinical lookup reference table (diagnosis_codes) to map raw department visits to global standard ICD-10 disease codes and SNOMED CT terminology concepts for research and clinical coding alignment.
+
+**SQL Code (`10_snomed_coding.sql`):**
+```sql
+-- Step 1: Create the Clinical Coding Reference Lookup Table
+CREATE TABLE IF NOT EXISTS diagnosis_codes (
+	code_id INTEGER PRIMARY KEY AUTOINCREMENT,
+	department TEXT NOT NULL,
+	icd10_code TEXT NOT NULL,
+	snomedi_ct_code BIGINT NOT NULL,
+	clinical_description TEXT NOT NULL 
+);
+
+-- Step 2: Populate Reference Table with Standardized Medical Codes
+INSERT INTO diagnosis_codes (department, icd10_code, snomedi_ct_code, clinical_description) VALUES
+('Cardiology', 'I21.9', 57054005, 'Acute Myocardial Infarction (Heart Attack)'),
+('Oncology', 'C34.9', 254637007, 'Malignant Neoplasm of Unspecified Bronchus or Lung'),
+('Emergency', 'R07.9', 29857009, 'Chest Pain, Unspecified');
+
+-- Step 3: Query Admissions mapped against ICD-10 and SNOMED CT Clinical Codes
+SELECT
+	a.admission_id, 
+	p.patient_id, 
+	p.patient_name,
+	a.department,
+	d.icd10_code,
+	d.snomedi_ct_code,
+	d.clinical_description,
+	a.admission_date, 
+	a.treatment_cost
+FROM admissions a 
+INNER JOIN patients p 
+	ON a.patient_id = p.patient_id 
+LEFT JOIN diagnosis_codes d
+	ON a.department = d.department 
+ORDER BY a.admission_id ASC;
+```
+
+**Output:**
+|admission_id|patient_id|patient_name|department|icd10_code|snomedi_ct_code|clinical_description|admission_date|treatment_cost|
+|------------|----------|------------|----------|----------|---------------|--------------------|--------------|--------------|
+|1|101|Sarah Khan|Cardiology|I21.9|57054005|Acute Myocardial Infarction (Heart Attack)|2026-01-10|1200|
+|2|102|John Smith|Oncology|C34.9|254637007|Malignant Neoplasm of Unspecified Bronchus or Lung|2026-01-12|3500|
+|3|103|Elena Gomez|Cardiology|I21.9|57054005|Acute Myocardial Infarction (Heart Attack)|2026-01-15|450|
+|4|104|David Chen|Emergency|R07.9|29857009|Chest Pain, Unspecified|2026-01-18|300|
+|5|105|Amira Patel|Oncology|C34.9|254637007|Malignant Neoplasm of Unspecified Bronchus or Lung|2026-01-20|2800|
+|6|101|Sarah Khan|Cardiology|I21.9|57054005|Acute Myocardial Infarction (Heart Attack)|2026-02-01|1100|
 
 ## Key Findings & Recommendations
 
-**1.Data Standardization & Governance:** Inconsistent entry formats (`'M'` vs `'Male'`) and un-discharged `NULL` records introduce reporting errors in aggregation queries. **Recommendation:** Implement automated data validation rules at reception check-in and utilize `COALESCE`(discharge_date, CURRENT_DATE) in operational dashboards to track active bed occupancy in real time.
+**Clinical Coding & Interoperability Standardization:** Mapping department encounters to standardized ICD-10 and SNOMED CT codes resolves medical ambiguity and ensures compliance with NHS digital health records standards. **Recommendation:** Mandatory integration of SNOMED CT clinical coding lookup tables across electronic health records (EHR) to streamline clinical reporting and epidemiological audit trails.
 
-**2.High Oncology Resource Intensity:** Oncology accounts for the largest share of overall expenditures (£6,300.00) and the longest length of stay ***(8.0 days average)***. 
+**Data Standardization & Governance:** Inconsistent entry formats (`'M'` vs `'Male'`) and un-discharged `NULL` records introduce reporting errors in aggregation queries. **Recommendation:** Implement automated data validation rules at reception check-in and utilize `COALESCE`(discharge_date, CURRENT_DATE) in operational dashboards to track active bed occupancy in real time.
+
+**High Oncology Resource Intensity:** Oncology accounts for the largest share of overall expenditures (£6,300.00) and the longest length of stay ***(8.0 days average)***. 
 **Recommendation:** Conduct a secondary clinical audit into the primary drivers of inpatient Oncology stays (such as pre-chemotherapy workups vs. active treatment monitoring) to evaluate if stable pre-treatment assessments can be safely transitioned to outpatient day clinics to free up inpatient bed capacity. 
 
-**3.Readmission Risk Signaling:** Patient `101` (Sarah Khan) had two separate Cardiology admissions within 3 weeks (18 days apart). This indicates a potential gap in post-discharge support. 
+**Readmission Risk Signaling:** Patient `101` (Sarah Khan) had two separate Cardiology admissions within 3 weeks (18 days apart). This indicates a potential gap in post-discharge support. 
 **Recommendation:** Establish a mandatory ***7-day post-discharge phone check-in protocol*** for all Cardiology patients to audit medication adherence, address early symptom flare-ups, and reduce avoidable 30-day readmissions.
 
-**4.High-Risk Vulnerable Cohort Management:** The CTE cohort segmentation identified senior high-cost individuals such as John Smith (Age 62, £3,500.00 total expenditure). 
+**High-Risk Vulnerable Cohort Management:** The CTE cohort segmentation identified senior high-cost individuals such as John Smith (Age 62, £3,500.00 total expenditure). 
 ***Recommendation:*** Assign dedicated Multi-Disciplinary Team (MDT) caseworkers and social care coordinators to senior patients meeting the high-cost threshold to structure comprehensive post-discharge plans.
 
-**5.Departmental Outlier Identification:** The RANK() audit revealed John Smith (£3,500.00) and Chloe Adams (£2,800.00) as the top two financial expenditures in Oncology. 
+**Departmental Outlier Identification:** The RANK() audit revealed John Smith (£3,500.00) and Chloe Adams (£2,800.00) as the top two financial expenditures in Oncology. 
 ***Recommendation:*** Implement senior financial case reviews for top-tier ranked cases to audit pharmaceutical expenditure against standardized treatment pathways.
 
-**6.Emergency Efficiency:** Emergency admissions demonstrate rapid throughput (***1.0 days average stay***), meeting acute operational discharge targets. 
+**Emergency Efficiency:** Emergency admissions demonstrate rapid throughput (***1.0 days average stay***), meeting acute operational discharge targets. 
